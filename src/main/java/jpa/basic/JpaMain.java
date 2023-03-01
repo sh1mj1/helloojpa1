@@ -7,21 +7,78 @@ import javax.persistence.EntityManagerFactory;
 import javax.persistence.EntityTransaction;
 import javax.persistence.Persistence;
 
-public class Main {
+public class JpaMain {
+
     public static void main(String[] args) {
         EntityManagerFactory emf = Persistence.createEntityManagerFactory("hello");
+
         EntityManager em = emf.createEntityManager();
+
         EntityTransaction tx = em.getTransaction();
         tx.begin();
 
-        Member member = new Member();
-        member.setId(1L);
-        member.setName("hello1");
+        try {
+            Member findMember = em.find(Member.class, 1L);
+            System.out.println("findMember.id = " + findMember.getId());
+            System.out.println("findMember.name = " + findMember.getName());
 
-        em.persist(member);
-        tx.commit();
-        em.close();
+            tx.commit();
+        } catch (Exception e) {
+            tx.rollback();
+        } finally {
+            em.close();
+        }
         emf.close();
-        System.out.println("Hello world!");
+
+        // 회원 삭제
+        /*
+        try {
+            Member findMember = em.find(Member.class, 1L);
+            em.remove(findMember);
+
+            tx.commit();
+        } catch (Exception e) {
+            tx.rollback();
+        } finally {
+            em.close();
+        }
+
+        emf.close();
+         */
+
+        // 회원 수정
+        /*
+        try {
+            Member findMember = em.find(Member.class, 1L);
+            findMember.setName("HelloJPA");
+
+            tx.commit();
+        } catch (Exception e) {
+            tx.rollback();
+        } finally {
+            em.close();
+        }
+
+        emf.close();
+         */
+
+        // 회원 다수 조회
+        /*
+        try {
+			List<Member> result = em.createQuery("select m from Member as m", Member.class).getResultList();
+
+			for (Member member : result) {
+                System.out.println("member.name = " + member.getName());
+            }
+
+            tx.commit();
+        } catch (Exception e) {
+            tx.rollback();
+        } finally {
+            em.close();
+        }
+
+        emf.close();
+         */
     }
 }

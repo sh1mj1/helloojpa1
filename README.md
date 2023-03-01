@@ -547,4 +547,3 @@ List<Member> result = em.createQuery("select m from Member as m", Member.class)
     - SQL을 추상화해서 특정 데이터베이스 SQL에 의존하지 않음
     - JPQL을 한마디로 정의하면 객체 지향 SQL 이다.
 
-# helloojpa1
