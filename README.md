@@ -1231,3 +1231,451 @@ ORDERS 테이블과 MEMBER 테이블 간의 참조가 없어서 주문한 회원
 Member orderMember = order.getMember();
 ```
 
+# ==== 5. 연관관계 매핑 기초 ====
+
+- 단방향 연관관계
+- 양방향 연관관계와 연관관계의 주인
+- 예제 2 - 연관관계 매핑 시작
+
+## 1. **단방향 연관관계**
+
+### **연관관계가 필요한 이유**
+
+> 객체지향 설계의 목표는 자율적인 객체들의 협력 공동체를 만드는 것이다. –조영호(객체지향의 사실과 오해)
+> 
+
+**연관관계를 설정하는 것** 자체가 **객체지향의 설계 목표**라고 할 수 있습니다.
+
+그런데 객체를 테이블에 맞춰서 데이터 중심으로 모델링하면 협력 관계를 만들 수가 없습니다.
+
+아래 예시 시나리오를 봅시다.
+
+- 회원과 팀이 있다.
+- 회원은 하나의 팀에만 소속될 수 있다.
+- 회원과 팀은 다대일 관계다.
+
+이 때 **객체를 테이블에 맞추어 모델링 (연관관계가 없는 객체) 하게 되면,**
+
+![https://user-images.githubusercontent.com/52024566/133784441-7ce787a0-bd9a-4e73-895f-b4aa3cbc4477.png](https://user-images.githubusercontent.com/52024566/133784441-7ce787a0-bd9a-4e73-895f-b4aa3cbc4477.png)
+
+```java
+@Entity
+public class Member {
+    
+    @Id @GeneratedValue
+    private Long id;
+    
+    @Column(name = "USERNAME")
+    private String name;
+    
+    @Column(name = "TEAM_ID")
+    private Long teamId;
+    …
+}
+
+@Entity
+public class Team {
+    
+    @Id @GeneratedValue
+    private Long id;
+    private String name;
+    …
+}
+```
+
+아래와 같은 문제점이 생깁니다.
+
+DB 에 저장 & 조회하는 로직
+
+```java
+// ==== Transaction 시작 ====
+//팀 저장
+Team team = new Team();
+team.setName("TeamA");
+em.persist(team);
+
+//회원 저장
+Member member = new Member();
+member.setName("member1");
+member.setTeamId(team.getId()); // 객체지향적인 방법이 아님
+em.persist(member);
+
+//조회
+Member findMember = em.find(Member.class, member.getId());\
+//연관관계가 없음
+Team findTeam = em.find(Team.class, team.getId());
+...
+```
+
+회원이나 팀을 저장한 후 조회할 때 외래키를 가지고 JOIN 쿼리를 직접 짜서 조회해야 합니다.
+
+**테이블**은 **외래 키로 조인을 사용해서 연관된 테이블을 찾는** 반면에
+
+**객체**는 **참조를 사용해서 연관된 객체를 찾습**니다.
+
+테이블과 객체 사이에는 이러한 큰 간격이 있습니다. 
+
+결론적으로 객체를 테이블에 맞춰서 데이터 중심으로 모델링하면 **협력 관계를 만들 수가 없고**. 객체가 참조를 통해 연관관계를 찾는다는 **객체지향 프로그래밍의 패러다임과도 완전히 어긋납**니다.
+
+### **객체 지향 모델링 (객체 연관관계 사용)**
+
+![https://user-images.githubusercontent.com/52024566/133784440-1b0adf58-b6e6-48b0-966c-325bb9502a1c.png](https://user-images.githubusercontent.com/52024566/133784440-1b0adf58-b6e6-48b0-966c-325bb9502a1c.png)
+
+테이블 연관관계에서의 외래키를 그대로 객체 연관관계에서 사용하지 않고 `Team` 이라는 클래스 타입을 사용하여 객체 연관관계를 갖도록 합니다.
+
+**객체의 참조와 테이블의 외래키를 매핑** 
+
+```java
+@Entity
+public class Member {
+    
+    @Id @GeneratedValue
+    private Long id;
+    
+    @Column(name = "USERNAME")
+    private String name;
+    private int age;
+    
+    // @Column(name = "TEAM_ID")
+    // private Long teamId;
+    
+    @ManyToOne
+    @JoinColumn(name = "TEAM_ID")
+    private Team team;
+		// getter & setter ...
+```
+
+`@ManyToOne` 과 `@JoinColumn` 을 통해서 Member 에서 Team 을 참조하도록 했습니다.
+
+![https://user-images.githubusercontent.com/52024566/133784432-42b187c5-f823-415c-b1e8-d5f46cbd2dd7.png](https://user-images.githubusercontent.com/52024566/133784432-42b187c5-f823-415c-b1e8-d5f46cbd2dd7.png)
+
+**연관관계 저장**
+
+```java
+// ==== Transaction 시작 ====
+Team team = new Team();
+team.setName("teamA");
+em.persist(team);
+
+Member member = new Member();
+member.setName("mamber1");
+member.setTeam(team);
+em.persist(member);
+
+em.flush();
+em.clear();
+
+Member findMember = em.find(Member.class, member.getId());
+Team findTeam = member.getTeam();
+```
+
+이제 마지막 줄을 보면 훨씬 더 효율적이면서도 객체 지향적으로 설계되었음을 볼 수 있습니다.
+
+## 2. **양방향 연관관계와 연관관계의 주인**
+
+### **양방향 매핑**
+
+![https://user-images.githubusercontent.com/52024566/133881293-d61b4496-85b7-4c5a-ad44-663c9c5088d6.png](https://user-images.githubusercontent.com/52024566/133881293-d61b4496-85b7-4c5a-ad44-663c9c5088d6.png)
+
+단방향 매핑과 비교했을 때 테이블에는 변화가 없습니다. 
+
+기존 단방향에서는 Member에서는 getTeam()을 통해 Team 엔티티를 참조할 수 있지만 Team에서는 Member를 참조할 수 없었다.
+
+관계형 DB에서는 **외래키 하나로 양방향 연관관계를 만족**시킬 수 있습니다. 이것이 객체와 관계형 DB의 가장 큰 차이입니다.
+
+**Member 엔티티는 단방향과 동일**
+
+```java
+public class Member {
+    
+    @Id @GeneratedValue
+    private Long id;
+    
+    @Column(name = "USERNAME")
+    private String name;
+    private int age;
+    
+    @ManyToOne
+    @JoinColumn(name = "TEAM_ID")
+    private Team team;
+    …
+```
+
+**Team 엔티티는 컬렉션 추가**
+
+```java
+@Entity
+public class Team {
+
+    @Id @GeneratedValue
+    private Long id;
+    
+    private String name;
+    
+    @OneToMany(mappedBy = "team")
+    List<Member> members = new ArrayList<Member>();
+    …
+}
+```
+
+`members` 라는 List 을 추가해서 양방향 연관관계를 만들어줍니다.
+
+**반대 방향으로 객체 그래프 탐색**
+
+```java
+//조회
+Team findTeam = em.find(Team.class, team.getId());
+
+int memberSize = findTeam.getMembers().size();
+```
+
+이렇게 반대방향으로도 객체 그래프 탐색이 가능해졌습니다.
+
+그런데 `Team` 클래스에서 `@OneToMany(mappedBy = “team”)` 이라는 코드가 눈에 띕니다.
+
+### **연관관계의 주인과 mappedBy**
+
+이 `mappedBy` 가 연관관계의 개념에 대해 이해를 하기 어려울 수 있습니다.
+
+**객체와 테이블간에 연관관계를 맺는 차이를 이해해야** 합니다.
+
+**객체와 테이블이 관계를 맺는 차이**
+
+- 객체 연관관계 = 2개
+    - 회원 → 팀 연관관계 1개(단방향)
+    - 팀 → 회원 연관관계 1개(단방향)
+
+- 테이블 연관관계 = 1개
+    - 회원 ↔ 팀의 연관관계 1개(양방향)
+
+**객체의 양방향 관계**
+
+객체의 양방향 관계는 사실 양방향 관계가 아니라 서로 다른 단뱡향 관계 2개입니다.
+
+즉, 객체를 양방향으로 참조하려면 단방향 연관관계를 2개 만들어야 합니다.
+
+- A → B (`a.getB()`)  `class A { B b; }`
+- B → A (`b.getA()`)  `class B { A a; }`
+
+**테이블의 양방향 연관관계**
+
+테이블은 외래 키 하나로 두 테이블의 연관관계를 관리합니다.
+
+`MEMBER.TEAM_ID` 라는 외래키 하나로 양방향 연관관계 가집니다. (양쪽으로 조인 가능)
+
+```sql
+SELECT * FROM MEMBER M 
+				JOIN TEAM T ON M.TEAM_ID = T.TEAM_ID
+
+SELECT * FROM TEAM T
+				JOIN MEMBER M ON T.TEAM_ID = M.TEAM_ID
+```
+
+**결국, 테이블에서는 두 객체 중 하나로 외래키를 관리해야 합니다.**
+
+![https://user-images.githubusercontent.com/52024566/133881295-594c299c-c25d-4a4e-af78-f48c6ff80645.png](https://user-images.githubusercontent.com/52024566/133881295-594c299c-c25d-4a4e-af78-f48c6ff80645.png)
+
+### **연관관계의 주인(Owner)**
+
+**양방향 매핑 규칙**
+
+- 객체의 두 관계중 하나를 연관관계의 주인으로 지정합니다.
+- 연관관계의 주인만이 외래키를 관리(등록, 수정)합니다.
+- 주인이 아닌쪽은 읽기만 가능합니다.
+- 주인은 `mappedBy` 속성을 사용하지 않습니다.
+- 주인이 아니면 `mappedBy` 속성으로 주인을 지정해야 합니다.
+
+그렇다면 **어떤 객체를 주인으로 해야** 할까요?
+
+바로 외래키가 있는 있는 곳을 주인으로 지정해야 합니다.
+
+외래키가 있는 곳이 항상 N 이 됩니다. 즉, **N 쪽이 연관 관계의 주인**인 것이지요.
+
+여기서는 `Member.team`이 연관관계의 주인입니다.
+
+![https://user-images.githubusercontent.com/52024566/133881296-86fe7353-556c-4a46-92df-06153af58d25.png](https://user-images.githubusercontent.com/52024566/133881296-86fe7353-556c-4a46-92df-06153af58d25.png)
+
+그렇다면 `Team` 에서 외래키를 관리하는 것은 불가능할까요?
+
+사실 불가능하지는 않습니다. 하지만 `Team` 에서 `members` 을 수정한다고 합시다. 이 때 `Team` 이 아닌 `Member` 에 업데이트 쿼리가 날아가버립니다.
+
+즉, 불일치 현상이 발생합니다.
+
+### **양방향 매핑시 가장 많이 하는 실수**
+
+연관관계의 주인에 값을 입력하지 않음
+
+```java
+Member member = new Member();
+member.setName("mamber1");
+em.persist(member);
+
+Team team = new Team();
+team.setName("teamA");
+team.getMembers().add(member);
+em.persist(team);
+```
+
+실행 결과 DB
+
+![Untitled](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/8f68be8b-8ade-43ed-a979-3186ad8942f8/Untitled.png)
+
+당연한 결과입니다. `member` 객체에 `setTeam` 하지 않았기 때문이죠
+
+그렇다면 만약 `team.getMembers().add(member);` 을 하지 않는다면 어떻게 될까요?
+
+DB 에 반영하는데는 문제가 생기지 않습니다. 
+
+하지만 영속화 컨텍스트의 1차 캐시에 저장된 team 에서는 members 에 해당 Member 가 추가되지 않은 상태입니다.
+
+만약 이 상태에서 `team.members` 을 사용하면 DB 에서 조회하는 것이 아닌 1차 캐시에서 꺼내 사용하기 때문에 해당 members 가 추가되지 않은 결과가 리턴될 것입니다.
+
+그렇기 때문에 순수한 객체 관계를 고려하면 항상 양쪽 다 값을 입력해야 합니다. **양방향 매핑시 연관관계의 주인에 값을 입력해야 하는 것은 당연하고요.**
+
+> TIP: 연관관계 편의 메서드 작성!
+> 
+
+```java
+public void changeTeam(Team team){
+		this.team = team;
+		team.getMembers().add(this);
+}
+```
+
+이런 식으로 편의메서드를 작성하여 사용하면 Team 을 세팅해주는 시점에서 해당 team 에 Member 도 같이 추가됩니다. 이 때 Getter Setter 가 아닌 사용자 정의 메서드명(임의 메서드명)으로 정의해주는 것이 좋습니다.
+
+```java
+public void changeTeam(Team team) { // 로직이 섞여있을 경우 Getter, Setter 사용을 피하자.
+    this.team = team;
+    team.getMembers().add(this);
+}
+```
+
+```java
+public void addMember(Member member) {
+    member.setTeam(this);
+    members.add(member);
+}
+```
+
+연관관계 편의 메소드가 양 쪽에 있을 경우 문제의 소지가 될 확률이 높으니 한 쪽에만 생성하는 것이 좋습니다.
+
+### **양방향 연관관계 무한 루프 주의**
+
+이렇게 양방향 매핑을 할 때는 **무한 루프를 조심해야** 합니다.
+
+```java
+/* 회원(Member) 엔티티*/
+@Entity
+public class Member {
+		...
+    @Override
+    public String toString() {
+        return "Member{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", team=" + team +
+                '}';
+    }
+		...
+}
+
+/* 팀(Team) 엔티티 */
+@Entity
+public class Team{
+    ...
+    @Override
+    public String toString() {
+        return "Team{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", members=" + members +
+                '}';
+    }
+		...
+}
+```
+
+위와 같이 `toStirng` 메서드를 override 했다고 합시다.
+
+처음 `member.toString()` 을 호출하면 `teem` 을 출력하기 위해서 다시 `teams().toString()` 을 호출합니다. 그러면 다시 `members` 을 출력하기 위해서 `member.toString()` 을 호출하는 무한 루프에 빠질 수 있습니다.
+
+그러므로 컨트롤러에서 이런 객체들을 반환할 때 절대로 Entity 을 그대로 반환하면 안되고 DTO 로 반환해야 합니다. 
+
+`toString()` 만의 문제가 아닌  lombok 라이브러리, 혹은 JSON 생성 라이브러리를 사용할 때도 마찬가지입니다.
+
+1. JSON 생성 시 무한 루프 가능성
+2. 엔티티 변경 시 API Spec이 변경됨
+
+### **양방향 매핑 정리**
+
+- **단방향 매핑만으로도 이미 연관관계 매핑은 완료**
+- 양방향 매핑은 반대 방향으로 조회(객체 그래프 탐색) 기능이 추가된 것 뿐
+- JPQL에서 역방향으로 탐색할 일이 많음
+- 단방향 매핑을 우선으로 잘 해놓고 양방향은 필요할 때 추가해도 됨 (테이블에 영향을 주지 않음)
+- 비즈니스 로직을 기준으로 연관관계의 주인을 선택하면 안됨
+- **연관관계의 주인은 외래키의 위치를 기준으로 정해야 함**
+
+## 3. **실전 예제 2 - 연관관계 매핑 시작**
+
+### **테이블 구조**
+
+![https://user-images.githubusercontent.com/52024566/133881292-bafaf450-b4fc-4b68-bab7-0f880763320a.png](https://user-images.githubusercontent.com/52024566/133881292-bafaf450-b4fc-4b68-bab7-0f880763320a.png)
+
+테이블 구조는 이전과 같습니다.
+
+### **객체 구조**
+
+![https://user-images.githubusercontent.com/52024566/133881287-9d637e5d-29ef-4745-98a3-5a45c9578266.png](https://user-images.githubusercontent.com/52024566/133881287-9d637e5d-29ef-4745-98a3-5a45c9578266.png)
+
+참조를 사용하도록 변경하였습니다.
+
+일단 단방향 매핑을 먼저 해둡니다. 연관관계의 주인은 배운대로 외래키의 위치를 기준으로 합니다.
+
+현재는 `Member`에서 `orders`를 갖고 있을 이유는 없습니다. 도메인 관심사를 잘 분리하는 것이 중요합니다.
+
+JPA에서는 리스트를 초기화할 때 관례상 `new ArrayList<>()`로 초기화합니다.
+
+`[Member](http://Member.java), Order, OrderItem, Item` 의 전체 코드는 깃허브 참조.
+
+```java
+@OneToMany(mappedBy = "member")
+private List<Order> orders = new ArrayList<>();
+```
+
+`Order.java`
+
+```java
+@ManyToOne
+@JoinColumn(name = "MEMBER_ID")
+private Member member;
+```
+
+연관관계의 주인은 `MEMBER_ID`에 대응하는 `member`이다.
+
+`Order.java`
+
+```java
+@OneToMany(mappedBy = "order")
+private List<OrderItem> orderItems;
+```
+
+`OrderItem.java`
+
+```java
+@ManyToOne
+@JoinColumn(name = "ORDER_ID")
+private Order order;
+```
+
+연관관계의 주인은 `ORDER_ID`에 대응하는 `order`이다.
+
+연관관계 편의 메소드는 다음과 같이 생성한다.
+
+```java
+public void addOrderItem(OrderItem orderItem) {
+    orderItems.add(orderItem);
+    orderItem.setOrder(this);
+}
+```
+

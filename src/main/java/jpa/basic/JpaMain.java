@@ -30,7 +30,7 @@ public class JpaMain {
         }
         emf.close();
 
-        // 회원 삭제
+        //  ==== 회원 삭제 ====
         /*
         try {
             Member findMember = em.find(Member.class, 1L);
@@ -46,7 +46,7 @@ public class JpaMain {
         emf.close();
          */
 
-        // 회원 수정
+        // ==== 회원 수정 ====
         /*
         try {
             Member findMember = em.find(Member.class, 1L);
@@ -62,7 +62,7 @@ public class JpaMain {
         emf.close();
          */
 
-        // 회원 다수 조회
+        // ==== 회원 다수 조회 ====
         /*
         try {
 			List<Member> result = em.createQuery("select m from Member as m", Member.class).getResultList();
