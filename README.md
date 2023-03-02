@@ -547,3 +547,267 @@ List<Member> result = em.createQuery("select m from Member as m", Member.class)
     - SQL을 추상화해서 특정 데이터베이스 SQL에 의존하지 않음
     - JPQL을 한마디로 정의하면 객체 지향 SQL 이다.
 
+
+
+# ==== 3. 영속성 관리 - 내부 동작 방식 ==== 
+- 영속성 컨텍스트 1
+- 플러시
+- 준영속 상태
+
+## 1. **영속성 컨텍스트**
+
+JPA에서 가장 중요한 2가지는 아래와 같습니다.
+
+- 객체와 관계형 데이터베이스 매핑하기 (Object Relational Mapping)
+    - 정적인 영역입니다.
+
+- 영속성 컨텍스트
+    - 동적인 영역입니다.
+
+### **엔티티 매니저 팩토리와 엔티티 매니저**
+
+![https://user-images.githubusercontent.com/52024566/133262752-97bf3b3a-d27a-455c-aa28-876124d547da.png](https://user-images.githubusercontent.com/52024566/133262752-97bf3b3a-d27a-455c-aa28-876124d547da.png)
+
+웹 애플리케이션이 구동하는 시점에 `EntityManagerFactory` 을 생성하여 가지고 있습니다. 
+
+웹 애플리케이션에서 요청이 들어올 경우 `EntityManagerFactory` 는 고객의 요청이 들어올 때마다 `EntityManager`를 생성하고 엔티티 매니저는 DB 커넥션 풀(`Connection Pool`)을 사용하여 DB에 접근, 핸들링합니다.
+
+### **영속성 컨텍스트란**
+
+**영속성 컨텍스트**는 JPA를 이해하는데 가장 중요한 용어로 **엔티티를 영구 저장하는 환경**입니다.
+
+```java
+// 엔티티를 영속석 컨텍스트에 저장한다는 코드
+EntityManager.persist(entity);
+```
+
+영속성 컨텍스트는 논리적인 개념으로 **눈에 보이지 않습니다.** 우리는 엔티티 매니저를 통해서 영속성 컨텍스트에 접근합니다.
+
+![Untitled](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/19014328-b5e0-4502-9507-69517217cb5b/Untitled.png)
+
+### **엔티티의 생명주기**
+
+![https://user-images.githubusercontent.com/52024566/133262753-b1194492-286d-4ca9-b1ea-e905d68f57a0.png](https://user-images.githubusercontent.com/52024566/133262753-b1194492-286d-4ca9-b1ea-e905d68f57a0.png)
+
+- 비영속 (new/transient)
+    - 영속성 컨텍스트와 전혀 관계가 없는 새로운 상태
+
+![https://user-images.githubusercontent.com/52024566/133262742-84200f67-0d4c-45a2-8e0d-9ec8292b7ad0.png](https://user-images.githubusercontent.com/52024566/133262742-84200f67-0d4c-45a2-8e0d-9ec8292b7ad0.png)
+
+아래 객체를 생성한 상태는 비영속입니다.
+
+```java
+Member member = new Member();
+member.setId("member1");
+member.setUsername("회원1");
+```
+
+- 영속 (managed)
+    - 영속성 컨텍스트에 관리되는 상태
+
+![https://user-images.githubusercontent.com/52024566/133262757-2f74ad1a-cbb7-4d5d-ab3e-c4ef7efb565b.png](https://user-images.githubusercontent.com/52024566/133262757-2f74ad1a-cbb7-4d5d-ab3e-c4ef7efb565b.png)
+
+영속 상태가 된다고 해서 쿼리가 날라가는 것이 아닙니다.
+
+```java
+EntityManager em = emf.createEntityManager();
+em.getTransaction().begin();
+
+//객체를 저장한 상태(영속)
+em.persist(member);
+```
+
+- 준영속 (detached)
+    - 영속성 컨텍스트에 저장되었다가 분리된 상태
+
+```java
+//회원 엔티티를 영속성 컨텍스트에서 분리, 준영속 상태
+em.detach(member);
+```
+
+- 삭제 (removed)
+    - 삭제된 상태
+
+```java
+// 객체를 삭제한 상태(삭제). 실제로 DB 에서 해당 ROW 을 삭제하는 것.
+em.remove(member);
+```
+
+### **영속성 컨텍스트의 이점**
+
+영속성 컨텍스트는 **어플리케이션과 DB 사이의 중간 계층**이라고 볼 수 있습니다. 여기서 생기는 이점이 존재합니다.
+
+ **1. 1차 캐시**
+
+![https://user-images.githubusercontent.com/52024566/133262662-fff9c2e3-2cf3-4697-8263-2a7fe2652d9a.png](https://user-images.githubusercontent.com/52024566/133262662-fff9c2e3-2cf3-4697-8263-2a7fe2652d9a.png)
+
+```java
+//엔티티를 생성한 상태(비영속)
+Member member = new Member();
+member.setId("member1");
+member.setUsername("회원1");
+
+//1차 캐시에 저장됨
+em.persist(member);
+
+//1차 캐시에서 조회
+Member findMember = em.find(Member.class, "member1");
+```
+
+![https://user-images.githubusercontent.com/52024566/133262732-3d9bc542-bcd1-4f7c-b748-a356b41ffe4f.png](https://user-images.githubusercontent.com/52024566/133262732-3d9bc542-bcd1-4f7c-b748-a356b41ffe4f.png)
+
+JPA에서 조회를 할 경우 바로 DB로 접근하지 않고 영속성 컨텍스트 내의 **1차 캐시에 접근**합니다. 
+
+![https://user-images.githubusercontent.com/52024566/133262736-02b7dd8b-9a31-4120-bd9b-4965c6382b08.png](https://user-images.githubusercontent.com/52024566/133262736-02b7dd8b-9a31-4120-bd9b-4965c6382b08.png)
+
+만약 1차 캐시에 해당 엔티티가 없을 경우 데이터베이스에서 조회합니다.
+
+그러나 엔티티 매니저는 트랜잭션 단위로 존재합니다. 데이터베이스 트랜잭션 내부에서 만들고 종료되기 때문에 하나의 비즈니스 로직이 종료될 경우 1차 캐시는 모두 사라지기 때문에 어플리케이션 전체에서 공유하는 캐시(2차 캐시) 와 달리 성능의 이점은 크지 않다.
+
+물론 비즈니스 로직이 복잡할수록 효과는 클 것입니다.
+
+ **2. 영속 엔티티의 동일성(identity) 보장**
+
+```java
+Member a = em.find(Member.class, "member1");
+Member b = em.find(Member.class, "member1");
+System.out.println(a == b); //동일성 비교 true
+```
+
+1차 캐시로 반복 가능한 읽기(REPEATABLE READ) 등급의 트랜잭션 격리 수준을 데이터베이스가 아닌 애플리케이션 차원에서 제공합니다.
+
+즉, JPA 로 엔티티를 조회를 했을 때 같은 엔티티를 조회했다면 동일성을 보장하는 것이지요.
+
+ **3. 트랜잭션을 지원하는 쓰기 지연 (transactional write-behind)**
+
+```java
+EntityManager em = emf.createEntityManager();
+EntityTransaction transaction = em.getTransaction();
+
+// [트랜잭션] 시작 - 엔티티 매니저는 데이터 변경시 트랜잭션을 시작해야 함
+transaction.begin(); // 
+
+em.persist(memberA);
+em.persist(memberB);
+
+//여기까지 INSERT SQL을 데이터베이스에 보내지 않는다.
+//커밋하는 순간 데이터베이스에 INSERT SQL을 보낸다.
+transaction.commit(); // [트랜잭션] 커밋
+```
+
+![https://user-images.githubusercontent.com/52024566/133262749-b03a97ed-e013-4faa-838d-1c9a55e3345c.png](https://user-images.githubusercontent.com/52024566/133262749-b03a97ed-e013-4faa-838d-1c9a55e3345c.png)
+
+위 상태에서는 memberA 와 memberB 모두 쓰기 지연 SQL 저장소에 저장되어 있고 실제 DB 에 적용은 안 된 상태입니다.
+
+![https://user-images.githubusercontent.com/52024566/133262746-660da1f2-67a6-4901-9fd4-41f746975eed.png](https://user-images.githubusercontent.com/52024566/133262746-660da1f2-67a6-4901-9fd4-41f746975eed.png)
+
+`commit()` 시점에 쓰기 지연 SQL 에 저장된 쿼리들을 다 실행시켜서 DB 에 적용합니다.
+
+이렇게 쓰기 지연을 사용하면 버퍼링 기능을 가질 수 있습니다. 쿼리를 매 순간 여러번 날리지 않고 최적화가 가능하지요.
+
+```java
+<property name="hibernate.jdbc.batch_size" value = "10"/>
+```
+
+위처럼 몇개릴 버퍼링 할지 설정할 수 있습니다.
+
+ **4. 변경 감지(Dirty Checking)**
+
+```java
+EntityManager em = emf.createEntityManager();
+EntityTransaction transaction = em.getTransaction();
+transaction.begin(); // [트랜잭션] 시작
+
+// 영속 엔티티 조회
+Member memberA = em.find(Member.class, "memberA");
+
+// 영속 엔티티 데이터 수정
+memberA.setUsername("hi");
+memberA.setAge(10);
+
+//em.update(member) 이런 코드가 있어야 하지 않을까?
+
+transaction.commit(); // [트랜잭션] 커밋
+```
+
+![https://user-images.githubusercontent.com/52024566/133262740-10892bdd-d6fc-4f82-b79a-23bd3fc51f1f.png](https://user-images.githubusercontent.com/52024566/133262740-10892bdd-d6fc-4f82-b79a-23bd3fc51f1f.png)
+
+1차 캐시안에는 `@Id`, `Entity`, `스냅샷`이 있습니다. 최초로 영속성 컨텍스트(1차 캐시)에 들어오는 순간 스냅샷을 찍어서 저장해둡니다.
+
+JPA 는 프랜잭션이 `commit()`되는 순간에 엔티티와 스냅샷을 모두 비교합니다. 만약 변경된 것이 있을 경우 쓰기 지연 SQL 저장소에 업데이트 쿼리를 저장하고 수행하게 됩니다. 
+
+즉, 따로 `em.update(member);`  와 같은 코드가 전혀 필요하지 않는 것입니다.
+
+이러한 장점 외에도 영속성 컨텍스트를 사용하면 지연 로딩 같은 다른 장점들도 가지고 있습니다.
+
+## 2. **플러시**
+
+플러시는 영속성 컨텍스트의 변경내용을 데이터베이스에 반영, 동기화(sync)하는 것을 말합니다. 
+
+### 플러시 발생
+
+만약 **플러시가 발생**하면 아래와 같은 프로세스가 이루어집니다.
+
+1. 변경 감지
+2. 수정된 엔티티 쓰기 지연 SQL 저장소에 등록
+3. 쓰기 지연 SQL 저장소의 쿼리를 데이터베이스에 전송 (등록, 수정, 삭제 쿼리)
+
+### 플러시 방법
+
+영속성 컨텍스트는 자동으로 호출할 수 있고 수동으로 플러시할 수도 있습니다.
+
+- `em.flush()` - 직접 호출. 일반적인 경우에는 사용하지 않으나 테스트할 때 사용할 수 있음
+- 트랜잭션 커밋 - 플러시 자동 호출
+- JPQL 쿼리 실행 - 플러시 자동 호출
+
+**JPQL 쿼리 실행시 플러시가 자동으로 호출되는 이유**
+
+```java
+em.persist(memberA);
+em.persist(memberB);
+em.persist(memberC);
+
+//중간에 JPQL 실행
+query = em.createQuery("select m from Member m", Member.class);
+List<Member> members= query.getResultList();
+```
+
+JPQL 쿼리를 실행하는 시점 바로 이전에 member 셋을 영속성 컨텍스트에 넣었습니다. 
+
+JPQL 쿼리를 실행하는 시점에 이 member 들이 조회가 안되는 경우를 막기 위해 JPA 에서는 JPQL 쿼리를 수행하기 전에 flush 을 실행하여 DB 와 영속성 컨텍스트 간에 동기화를 해줍니다.
+
+**플러시는 영속성 컨텍스트를 비우지 않습니다.**
+
+단지 영속성 컨텍스트의 변경 내용을 데이터베이스에 동기화하는 작업을 합니다. 
+
+우리는 커밋 직전에만 동기화하면 되므로 트랜잭션이라는 작업 단위가 중요합니다!
+
+**플러시 모드 옵션**
+
+```java
+em.setFlushMode(FlushModeType.COMMIT)
+```
+
+- FlushModeType.AUTO : 커밋이나 쿼리를 실행할 때 플러시 (기본값, 변경할 일은 거의 없다)
+- FlushModeType.COMMIT : 커밋할 때만 플러시
+
+## 3. **준영속 상태**
+
+위에서 알아보았던 준영속 상태를 조금 더 생각해봅시다.
+
+**준영속 상태**는 **영속 상태의 엔티티가 영속성 컨텍스트에서 분리(detached)** 된 것이라고 했습니다.
+
+그렇다면 당연히 **영속성 컨텍스트가 제공하는 기능을 사용할 수 없습니다.**
+
+### **준영속 상태로 만드는 방법**
+
+```java
+// 특정 엔티티만 준영속 상태로 전환
+em.detach(entity)
+
+// 영속성 컨텍스트를 완전히 초기화
+em.clear()
+
+// 영속성 컨텍스트를 종료
+em.close()
+```
